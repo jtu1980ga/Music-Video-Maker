@@ -1,0 +1,6 @@
+{
+  "name": "7clouds Video Studio - AI Lyric Video Creator",
+  "description": "Upload MP3/WAV audio to generate timestamped lyrics, cinematic story treatments, 10-second scene prompts, AI scene visuals, and render burned-in 7clouds-style lyric MP4 videos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
