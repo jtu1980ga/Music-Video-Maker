@@ -12,10 +12,18 @@ import {
   Copy,
   Check,
   RotateCcw,
+  Clock,
 } from 'lucide-react';
 import { TimestampLine, SongHarmonyInfo } from '../types';
 import { formatTime } from '../utils/audioUtils';
-import { exportToLRC, exportToSRT } from '../utils/subtitles';
+import {
+  exportToLRC,
+  exportToSRT,
+  exportToPlainText,
+  exportToLRCWithoutHeader,
+} from '../utils/subtitles';
+import { PasteLyricsModal } from './PasteLyricsModal';
+import { sanitizeLyricLines } from '../utils/lyricsCleaner';
 
 interface LyricsEditorProps {
   lines: TimestampLine[];
@@ -54,6 +62,23 @@ export const LyricsEditor: React.FC<LyricsEditorProps> = ({
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [customText, setCustomText] = useState('');
   const [isParsingCustom, setIsParsingCustom] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  const handleCopyPlain = () => {
+    const text = exportToPlainText(lines);
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopyFeedback('✓ Plain Lyrics Copied to Clipboard!');
+    setTimeout(() => setCopyFeedback(null), 2500);
+  };
+
+  const handleCopyTimestamped = () => {
+    const lrc = exportToLRCWithoutHeader(lines);
+    if (!lrc) return;
+    navigator.clipboard.writeText(lrc);
+    setCopyFeedback('✓ [mm:ss.xx] Timestamped Lyrics Copied!');
+    setTimeout(() => setCopyFeedback(null), 2500);
+  };
 
   const handleUpdateLine = (id: string, field: keyof TimestampLine, val: any) => {
     const updated = lines.map((l) => (l.id === id ? { ...l, [field]: val } : l));
@@ -270,30 +295,72 @@ export const LyricsEditor: React.FC<LyricsEditorProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Direct 1-Click Copy Plain Lyrics */}
           <button
-            onClick={() => setShowPasteModal(true)}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+            type="button"
+            onClick={handleCopyPlain}
+            className="px-3 py-2 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-xs font-bold border border-emerald-500/40 transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
+            title="Copy plain transcribed lyrics without timestamps"
           >
-            <FileText className="w-3.5 h-3.5 text-cyan-400" />
-            Paste My Lyric Style / The Fray
+            <Copy className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Copy Plain Lyrics</span>
           </button>
+
+          {/* Direct 1-Click Copy Timestamp Lyrics */}
           <button
+            type="button"
+            onClick={handleCopyTimestamped}
+            className="px-3 py-2 rounded-xl bg-cyan-950 hover:bg-cyan-900 text-cyan-300 text-xs font-bold border border-cyan-500/40 transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
+            title="Copy [mm:ss.xx] timestamped lyrics (LRC format)"
+          >
+            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Copy Timestamp Lyrics</span>
+          </button>
+
+          {/* Import / Paste Lyrics Central Hub */}
+          <button
+            type="button"
+            onClick={() => setShowPasteModal(true)}
+            className="px-3 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-indigo-300 text-xs font-bold border border-indigo-500/40 transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
+            title="Paste external plain lyrics or timestamped LRC / SRT files"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Paste External Lyrics</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const cleaned = sanitizeLyricLines(lines, duration);
+              onLinesChange(cleaned);
+            }}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Clean all chatter, bracket noise, and subtitle attributions"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Clean Noise</span>
+          </button>
+
+          <button
+            type="button"
             onClick={downloadSRT}
             className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
             title="Download SubRip Subtitles"
           >
             <Download className="w-3.5 h-3.5" />
-            Export .SRT
+            <span>.SRT</span>
           </button>
           <button
+            type="button"
             onClick={downloadLRC}
             className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
             title="Download LRC Karaoke format"
           >
             <Download className="w-3.5 h-3.5" />
-            Export .LRC
+            <span>.LRC</span>
           </button>
           <button
+            type="button"
             onClick={onProceedToStory}
             disabled={isLoadingStory || lines.length === 0}
             className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-xs tracking-wide uppercase transition-all shadow-lg shadow-indigo-600/25 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
@@ -313,67 +380,36 @@ export const LyricsEditor: React.FC<LyricsEditorProps> = ({
         </div>
       </div>
 
-      {/* Paste My Lyric Style Modal */}
-      {showPasteModal && (
-        <div className="p-5 rounded-2xl bg-slate-900 border border-cyan-500/40 shadow-2xl space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-cyan-400" />
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider">
-                Paste Custom Lyric Style or Load The Fray 7clouds Preset
-              </h4>
-            </div>
-            <button
-              onClick={() => setShowPasteModal(false)}
-              className="text-xs text-slate-400 hover:text-white cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
-
-          <p className="text-xs text-slate-300">
-            You can paste your custom lyric lines below (with or without timestamps/chords like <span className="font-mono text-cyan-300">(G) hello God</span>), or load the authentic <strong>7clouds 'How to Save a Life' (The Fray)</strong> words styling with 1 click.
-          </p>
-
-          <textarea
-            value={customText}
-            onChange={(e) => setCustomText(e.target.value)}
-            rows={6}
-            placeholder={`Paste your lyrics here. For example:\n(G) Step one, you say we (C) need to talk\n(Em) He walks, you say (D) sit down it's just a talk\n(G) Where did I go wrong? (D) I lost a friend...`}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-          />
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleLoadTheFrayPreset}
-              disabled={isParsingCustom}
-              className="px-4 py-2 rounded-xl bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Load Official 7clouds "The Fray - How to Save a Life"</span>
-            </button>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPasteModal(false)}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs hover:bg-slate-700 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyCustomLyrics}
-                disabled={isParsingCustom || !customText.trim()}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
-              >
-                {isParsingCustom ? 'Aligning...' : 'Apply My Pasted Lyrics'}
-              </button>
-            </div>
-          </div>
+      {/* Copy Notification Toast */}
+      {copyFeedback && (
+        <div className="bg-emerald-600/90 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center justify-between animate-fade-in shadow-lg">
+          <span className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-200" />
+            {copyFeedback}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCopyFeedback(null)}
+            className="text-emerald-200 hover:text-white text-xs underline cursor-pointer"
+          >
+            Dismiss
+          </button>
         </div>
       )}
+
+      {/* Comprehensive Paste & Copy Lyrics Modal */}
+      <PasteLyricsModal
+        isOpen={showPasteModal}
+        onClose={() => setShowPasteModal(false)}
+        onApplyLyrics={(newLines, newTitle, newArtist) => {
+          onLinesChange(newLines);
+          setShowPasteModal(false);
+        }}
+        totalDuration={duration}
+        currentTitle={title}
+        currentArtist={artist}
+        currentLines={lines}
+      />
 
       {/* AI Key of Song & Chord Changes Panel (User-Requested Option) */}
       <div className="bg-gradient-to-r from-amber-950/40 via-slate-900 to-indigo-950/40 p-4 rounded-2xl border border-amber-500/20 shadow-md">

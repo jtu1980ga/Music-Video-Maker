@@ -91,19 +91,40 @@ export async function transcribeWithWhisper(options: {
   const data: any = await response.json();
   const segments: any[] = data.segments || [];
 
+  const HALLUCINATION_REGEX = /(?:subtitles? by|transcribed by|sync by|closed captions?|thank you for watching|thanks for watching|please like and subscribe|subscribe|amara\.org|screencast|inaudible|unintelligible|\[music\]|\(music\)|\bmusic\b|applause|laughter|silence|♪|♫)/i;
+
   let lines: WhisperTimestampLine[] = [];
 
   if (segments.length > 0) {
-    lines = segments.map((seg, idx) => {
-      const rawText = String(seg.text || '').trim();
-      const startTime = Math.max(0, parseFloat(seg.start) || 0);
-      const endTime = Math.max(startTime + 0.5, parseFloat(seg.end) || startTime + 4);
+    const validSegments = segments
+      .map((seg, idx) => {
+        let rawText = String(seg.text || '').trim();
+        // Remove unwanted brackets (unless chord format like (G))
+        rawText = rawText.replace(/\[(?![A-Ga-g][#b]?(?:m|maj|min|dim|aug|sus\d?|\d)?\])[^\]]{3,}\]/gi, '').trim();
+        // Remove music notes and non-lyric noise
+        rawText = rawText.replace(/[♪♫]+/g, '').trim();
+        // Remove speaker prefixes like "Vocals:" or "Singer:"
+        rawText = rawText.replace(/^(?:vocals?|singer|vocalist|lead|man|woman):\s*/i, '');
+        // Collapse multiple spaces
+        rawText = rawText.replace(/\s+/g, ' ');
 
-      // Section guessing heuristic
+        const startTime = Math.max(0, parseFloat(seg.start) || 0);
+        const endTime = Math.max(startTime + 0.5, parseFloat(seg.end) || startTime + 4);
+
+        return { rawText, startTime, endTime, originalIdx: idx };
+      })
+      .filter((item) => {
+        if (!item.rawText || item.rawText.length < 2) return false;
+        if (/^[-—–._\s:;]+$/.test(item.rawText)) return false;
+        if (HALLUCINATION_REGEX.test(item.rawText) && item.rawText.length < 35) return false;
+        return true;
+      });
+
+    lines = validSegments.map((item, idx) => {
       let section: 'intro' | 'verse' | 'chorus' | 'bridge' | 'outro' = 'verse';
-      if (idx === 0 && startTime > 3) {
+      if (idx === 0 && item.startTime > 3) {
         section = 'intro';
-      } else if (idx >= segments.length - 2) {
+      } else if (idx >= validSegments.length - 2) {
         section = 'outro';
       } else if (idx % 4 >= 2) {
         section = 'chorus';
@@ -111,15 +132,19 @@ export async function transcribeWithWhisper(options: {
 
       return {
         id: `line-${idx + 1}`,
-        startTime: parseFloat(startTime.toFixed(2)),
-        endTime: parseFloat(endTime.toFixed(2)),
-        text: rawText,
+        startTime: parseFloat(item.startTime.toFixed(2)),
+        endTime: parseFloat(item.endTime.toFixed(2)),
+        text: item.rawText,
         section,
       };
     });
   } else if (data.text) {
     // If segments were omitted, break text by punctuation or sentences
-    const sentences = data.text.split(/(?<=[.?!,\n])\s+/).filter((s: string) => s.trim().length > 0);
+    const sentences = data.text
+      .split(/(?<=[.?!,\n])\s+/)
+      .map((s: string) => s.trim().replace(/[♪♫]+/g, ''))
+      .filter((s: string) => s.length > 1 && !HALLUCINATION_REGEX.test(s));
+
     const estDur = duration || 60;
     const perLine = estDur / Math.max(1, sentences.length);
 

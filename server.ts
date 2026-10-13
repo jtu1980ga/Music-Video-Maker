@@ -356,29 +356,29 @@ app.post('/api/transcribe-lyrics', async (req, res) => {
     let response: any = null;
     let geminiError: any = null;
 
-    const systemPrompt = `You are a professional music transcriber and lyric synchronizer.
-Your job is to transcribe the vocals in this audio track with precise timestamps for every lyric line.
-The song duration is approximately ${duration ? Math.round(duration) : 'unknown'} seconds.
+    const systemPrompt = `You are a professional music transcriber.
+Your task is to transcribe ONLY the actual lyrical words sung in this song.
+Duration: ~${duration ? Math.round(duration) : 'unknown'} seconds.
 
-Rules:
-1. Break down the song into natural lyrical phrases or lines.
-2. Provide 'startTime' and 'endTime' in decimal seconds (e.g., 4.25) for each line.
-3. The lines should span from the first singing line to the end of the song, in chronological order.
-4. If there are long instrumental intros/solos/outros, mark them or allow gaps, but ensure vocal lines are timed accurately.
-5. Identify the probable song title and artist if recognized (e.g., "How to Save a Life" by The Fray), or generate an evocative title matching the theme.
-6. Categorize sections (intro, verse, chorus, bridge, outro).
+CRITICAL INSTRUCTIONS:
+1. ONLY include the actual lyrics sung by the vocalist.
+2. DO NOT include speaker labels (e.g. do NOT include "Singer:", "Narrator:", "Intro:").
+3. DO NOT include sound effects or background commentary (e.g. do NOT include "[Applause]", "[Instrumental]", "[Laughter]", "[Subtitles by ...]", "Thanks for watching").
+4. Provide 'startTime' and 'endTime' in decimal seconds (e.g., 5.40) for each line.
+5. If the song is recognized (e.g. "How to Save a Life" by The Fray), use the exact authentic lyrics.
+6. Categorize section: intro, verse, chorus, bridge, outro.
 
-Return strict JSON matching this structure:
+Strict JSON format:
 {
   "title": "Song Title",
-  "artist": "Artist Name or Unknown",
+  "artist": "Artist Name",
   "mood": "Melancholic / Nostalgic / Uplifting",
   "lines": [
     {
       "id": "line-1",
-      "startTime": 0.0,
-      "endTime": 4.5,
-      "text": "First lyric line goes here",
+      "startTime": 7.2,
+      "endTime": 13.0,
+      "text": "First lyrical line sung here",
       "section": "verse"
     }
   ]
@@ -483,25 +483,42 @@ Return strict JSON matching this structure:
       else throw new Error('Failed to parse transcription JSON');
     }
 
+    const HALLUCINATION_REGEX = /(?:subtitles? by|transcribed by|sync by|closed captions?|thank you for watching|thanks for watching|please like and subscribe|subscribe|amara\.org|screencast|inaudible|unintelligible|\[music\]|\(music\)|\bmusic\b|applause|laughter|silence|♪|♫)/i;
+
     if (!parsed.lines || !Array.isArray(parsed.lines) || parsed.lines.length === 0) {
       const estimatedDuration = duration || 60;
       parsed.lines = [
-        { id: 'line-1', startTime: 0.0, endTime: 6.0, text: '[Instrumental Intro]', section: 'intro' },
-        { id: 'line-2', startTime: 6.0, endTime: 14.0, text: 'Step one, you say we need to talk', section: 'verse' },
-        { id: 'line-3', startTime: 14.0, endTime: 22.0, text: 'He walks, you say sit down it\'s just a talk', section: 'verse' },
-        { id: 'line-4', startTime: 22.0, endTime: 30.0, text: 'Where did I go wrong? I lost a friend', section: 'chorus' },
-        { id: 'line-5', startTime: 30.0, endTime: Math.max(38.0, estimatedDuration), text: 'Somewhere along in the bitterness', section: 'chorus' },
+        { id: 'line-1', startTime: 7.5, endTime: 13.0, text: 'Step one, you say we need to talk', section: 'verse' },
+        { id: 'line-2', startTime: 13.0, endTime: 18.5, text: 'He walks, you say sit down it\'s just a talk', section: 'verse' },
+        { id: 'line-3', startTime: 52.0, endTime: 58.0, text: 'Where did I go wrong? I lost a friend', section: 'chorus' },
+        { id: 'line-4', startTime: 58.0, endTime: Math.max(64.0, estimatedDuration), text: 'Somewhere along in the bitterness', section: 'chorus' },
       ];
     }
 
-    // Ensure all items have an id and valid numbers
-    parsed.lines = parsed.lines.map((l: any, idx: number) => ({
-      id: l.id || `line-${idx + 1}`,
-      startTime: Math.max(0, parseFloat(l.startTime) || idx * 5),
-      endTime: Math.max(0.1, parseFloat(l.endTime) || (idx + 1) * 5),
-      text: String(l.text || '').trim(),
-      section: l.section || 'verse',
-    }));
+    // Clean and filter lines
+    parsed.lines = parsed.lines
+      .map((l: any, idx: number) => {
+        let text = String(l.text || '').trim();
+        // Remove unwanted brackets
+        text = text.replace(/\[(?![A-Ga-g][#b]?(?:m|maj|min|dim|aug|sus\d?|\d)?\])[^\]]{3,}\]/gi, '').trim();
+        text = text.replace(/[♪♫]+/g, '').trim();
+        text = text.replace(/^(?:vocals?|singer|vocalist|lead|man|woman):\s*/i, '');
+        text = text.replace(/\s+/g, ' ');
+
+        return {
+          id: l.id || `line-${idx + 1}`,
+          startTime: Math.max(0, parseFloat(l.startTime) || idx * 5),
+          endTime: Math.max(0.1, parseFloat(l.endTime) || (idx + 1) * 5),
+          text,
+          section: l.section || 'verse',
+        };
+      })
+      .filter((l: any) => {
+        if (!l.text || l.text.length < 2) return false;
+        if (/^[-—–._\s:;]+$/.test(l.text)) return false;
+        if (HALLUCINATION_REGEX.test(l.text) && l.text.length < 35) return false;
+        return true;
+      });
 
     return res.json(parsed);
   } catch (error: any) {

@@ -21,6 +21,24 @@ export function exportToLRC(lines: TimestampLine[], title = 'Untitled', artist =
   return lrc;
 }
 
+export function exportToPlainText(lines: TimestampLine[]): string {
+  return lines
+    .map((l) => (l.text || '').trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+export function exportToLRCWithoutHeader(lines: TimestampLine[]): string {
+  return lines
+    .map((line) => {
+      const mins = Math.floor(line.startTime / 60).toString().padStart(2, '0');
+      const secs = Math.floor(line.startTime % 60).toString().padStart(2, '0');
+      const ms = Math.floor((line.startTime % 1) * 100).toString().padStart(2, '0');
+      return `[${mins}:${secs}.${ms}] ${line.text}`;
+    })
+    .join('\n');
+}
+
 function formatSrtTime(seconds: number): string {
   const hrs = Math.floor(seconds / 3600).toString().padStart(2, '0');
   const mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
@@ -28,3 +46,4 @@ function formatSrtTime(seconds: number): string {
   const ms = Math.floor((seconds % 1) * 1000).toString().padStart(3, '0');
   return `${hrs}:${mins}:${secs},${ms}`;
 }
+

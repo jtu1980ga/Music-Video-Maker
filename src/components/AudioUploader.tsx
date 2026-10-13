@@ -31,6 +31,7 @@ interface AudioUploaderProps {
   whisperApiKey: string;
   onWhisperKeyChange: (key: string) => void;
   onLoadOfficialPresetLyrics?: () => void;
+  onOpenPasteLyrics?: () => void;
   isHighDemand?: boolean;
 }
 
@@ -44,6 +45,7 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
   whisperApiKey,
   onWhisperKeyChange,
   onLoadOfficialPresetLyrics,
+  onOpenPasteLyrics,
   isHighDemand,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -390,18 +392,32 @@ export const AudioUploader: React.FC<AudioUploaderProps> = ({
 
           {/* Action Buttons */}
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
-            {/* Quick 1-Click The Fray 7clouds Template */}
-            {onLoadOfficialPresetLyrics && (
-              <button
-                type="button"
-                onClick={onLoadOfficialPresetLyrics}
-                disabled={isLoading}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
-              >
-                <FileText className="w-4 h-4 text-cyan-400" />
-                <span>Load The Fray (7clouds Stylings) Lyrics Directly</span>
-              </button>
-            )}
+            {/* Quick 1-Click The Fray 7clouds Template & Paste Custom Lyrics */}
+            <div className="flex flex-wrap items-center gap-2">
+              {onOpenPasteLyrics && (
+                <button
+                  type="button"
+                  onClick={onOpenPasteLyrics}
+                  disabled={isLoading}
+                  className="px-4 py-2.5 rounded-xl bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                >
+                  <FileText className="w-4 h-4 text-cyan-400" />
+                  <span>Lyrics Hub: Paste or Copy Lyrics (LRC / Genius)</span>
+                </button>
+              )}
+
+              {onLoadOfficialPresetLyrics && (
+                <button
+                  type="button"
+                  onClick={onLoadOfficialPresetLyrics}
+                  disabled={isLoading}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>The Fray (7clouds Stylings)</span>
+                </button>
+              )}
+            </div>
 
             <button
               onClick={() => onTranscribe(selectedEngine)}

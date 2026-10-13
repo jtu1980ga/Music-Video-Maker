@@ -38,6 +38,7 @@ import { RenderReviewTheatre } from './components/RenderReviewTheatre';
 import { VidIqKeyModal } from './components/VidIqKeyModal';
 import { MobileUploadPortal } from './components/MobileUploadPortal';
 import { CredentialsHubModal } from './components/CredentialsHubModal';
+import { PasteLyricsModal } from './components/PasteLyricsModal';
 
 export default function App() {
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -76,6 +77,8 @@ export default function App() {
   const [isMobileUploadView, setIsMobileUploadView] = useState(() => {
     return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'mobile-upload';
   });
+  // Custom External Lyrics Paste Modal state
+  const [isPasteLyricsModalOpen, setIsPasteLyricsModalOpen] = useState(false);
 
   // Audio element reference for master playback & canvas sync
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -491,6 +494,7 @@ export default function App() {
             whisperApiKey={whisperApiKey}
             onWhisperKeyChange={handleWhisperKeyChange}
             onLoadOfficialPresetLyrics={handleLoadOfficialPresetLyrics}
+            onOpenPasteLyrics={() => setIsPasteLyricsModalOpen(true)}
             isHighDemand={isHighDemandActive}
             onSongDetailsChange={(t, a) => {
               setSongTitle(t);
@@ -674,6 +678,22 @@ export default function App() {
         onClose={() => setIsCredentialsHubOpen(false)}
         initialTab={credentialsHubTab}
         onWhisperKeySaved={(key) => setWhisperApiKey(key)}
+      />
+
+      {/* Paste External Lyrics Modal (Genius, Spotify, AZLyrics, LRC, SRT, Chord Sheets) */}
+      <PasteLyricsModal
+        isOpen={isPasteLyricsModalOpen}
+        onClose={() => setIsPasteLyricsModalOpen(false)}
+        onApplyLyrics={(newLines, newTitle, newArtist) => {
+          setLyrics(newLines);
+          if (newTitle) setSongTitle(newTitle);
+          if (newArtist) setArtistName(newArtist);
+          setCurrentStep(2);
+        }}
+        totalDuration={audioInfo?.duration || 76}
+        currentTitle={songTitle}
+        currentArtist={artistName}
+        currentLines={lyrics}
       />
     </div>
   );
